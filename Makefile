@@ -173,7 +173,7 @@ static-checks: vendor
 SOURCE_DIR?=$(dir $(lastword $(MAKEFILE_LIST)))
 SOURCE_DIR:=$(abspath $(SOURCE_DIR))
 LOCAL_IP_ENV?=$(shell ip route get 8.8.8.8 | head -1 | awk '{print $$7}')
-ST_TO_RUN?=tests/st/calicoctl/test_crud.py
+ST_TO_RUN?=tests/st/calicoctl/
 # Can exclude the slower tests with "-a '!slow'"
 ST_OPTIONS?=
 
