@@ -16,10 +16,12 @@ import logging
 
 import yaml
 from nose_parameterized import parameterized
+from pprint import pformat
+from deepdiff import DeepDiff
 
 from tests.st.test_base import TestBase
 from tests.st.utils.utils import calicoctl, \
-    name, wipe_etcd, get_ip
+    name, wipe_etcd, get_ip, clean_calico_data
 
 logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -58,16 +60,13 @@ data['hep_tame'] = {
              'interfaceName': 'eth0',
              'profiles': ['profile1', 'profile2']}
 }
-data['hep_long_fields'] = {
+data['hep_complicated_name'] = {
     'apiVersion': 'v1',
     'kind': 'hostEndpoint',
-    'metadata': {'labels': {
-        '8roper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/9': 'frontendFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0',
-        'calico/k8s_ns': 'default',
-        'type': 'type-endFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0'},
-        'name': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_AlsoAVeryLongInterfaceNameTryingToCatchOutUpgradeCode75',
-        'node': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_Also.A.Very.LongNodeNameTryingTo-CatchOut_UpgradeCode75'},
-    'spec': {'expectedIPs': ['fd00:1::321'],
+    'metadata': {'labels': {'type': 'production'},
+                 'name': 'hepcomplicatedname123Im_a_Little.Teapot',
+                 'node': 'myhost'},
+    'spec': {'expectedIPs': ['192.168.0.1', '192.168.0.2'],
              'interfaceName': 'eth0',
              'profiles': ['profile1', 'profile2']}
 }
@@ -149,6 +148,28 @@ data['policy_long_name'] = {
              'selector': "role == 'database'",
              'types': ['ingress', 'egress']}
 }
+data['policy_net'] = {
+    'apiVersion': 'v1',
+    'kind': 'policy',
+    'metadata': {
+        'name': 'aname'},
+    'spec': {'egress': [{'action': 'allow'}],
+             'ingress': [{'action': 'allow',
+                          'destination': {'ports': [6379]},
+                          'protocol': 'tcp',
+                          'source': {'nets': ['192.168.0.1/32', '192.168.0.129/25']}}],
+             'selector': "role == 'database'",
+             'types': ['ingress', 'egress']}
+}
+data['policy_period_name'] = {
+    'apiVersion': 'v1',
+    'kind': 'policy',
+    'metadata': {
+        'name': 'policyperiod.name'},
+    'spec': {'egress': [{'action': 'allow'}],
+             'selector': "role == 'database'",
+             'types': ['egress']}
+}
 data['profile_tame'] = {
     'apiVersion': 'v1',
     'kind': 'profile',
@@ -159,12 +180,10 @@ data['profile_tame'] = {
                          {'action': 'allow',
                           'source': {'selector': "profile == 'profile1'"}}]}
 }
-data['profile_long_labels'] = {
+data['profile_many_nets'] = {
     'apiVersion': 'v1',
     'kind': 'profile',
-    'metadata': {'labels': {
-        '8roper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/9': 'frontendFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0'},
-        'name': '-Mary_had-A-Little___Lamb--Whose---Fleece-Was-White.As.Snow...She-Also-Had_an-Evil-ProfileName_in_order_to.break.upgradeprofile1'},
+    'metadata': {'name': 'mary'},
     'spec': {'egress': [{'action': 'allow'}],
              'ingress': [{'action': 'deny',
                           'source': {'nets': ['10.0.20.0/24',
@@ -374,7 +393,7 @@ data['wep_similar_name'] = {
                  'name': 'eth0',
                  'node': 'rack1-host1',
                  'orchestrator': 'k8s',
-                 'workload': 'default/frontend-5gs43'},
+                 'workload': 'default.frontend-5gs43'},
     'spec': {'interfaceName': 'cali0ef24ba',
              'ipNetworks': ['192.168.0.0/32',
                             '192.168.1.255/32',
@@ -396,21 +415,6 @@ data['wep_similar_name'] = {
                             '192.168.17.239/32',
                             '192.168.18.238/32'],
              'mac': 'fe:ed:ca:fe:00:00',
-             'profiles': ['profile1']}
-}
-data['wep_long_labels'] = {
-    'apiVersion': 'v1',
-    'kind': 'workloadEndpoint',
-    'metadata': {'labels': {
-        '8roper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/9': 'frontendFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0',
-        'calico/k8s_ns': 'default'},
-        'name': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_AlsoAVeryLongInterfaceNameTryingToCatchOutUpgradeCode75',
-        'node': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_Also.A.Very.LongNodeNameTryingTo-CatchOut_UpgradeCode75',
-        'orchestrator': 'k8s',
-        'workload': 'default.-_.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My_AlsoAVeryLongWorkload-NameTryingToCatchOutUpgradeCode5'},
-    'spec': {'interfaceName': 'cali0ef24ba',
-             'ipNetworks': ['192.168.255.255/32', 'fd::1:40'],
-             'mac': 'ca:fe:1d:52:bb:e9',
              'profiles': ['profile1']}
 }
 data['wep_similar_name_2'] = {
@@ -451,29 +455,36 @@ data['prednat_policy'] = {
              'selector': 'has(host-endpoint)'}
 }
 
+def strip_orch_label(data):
+    if 'metadata' in data:
+        if 'labels' in data['metadata']:
+            if 'projectcalico.org/orchestrator' in data['metadata']['labels']:
+                del(data['metadata']['labels']['projectcalico.org/orchestrator'])
+    return data
 
 @parameterized([
     ("bgppeer_long_node_name",),
     ("bgppeer_dotted_asn",),
     ("hep_tame",),
-    ("hep_long_fields",),
     ("hep_mixed_ip",),
+    ("hep_complicated_name",),
     ("ippool_v4_small",),
     ("ippool_v4_large",),
     ("ippool_mixed",),
     ("node_long_name",),
     ("node_tame",),
     ("policy_tame",),
+    ("policy_net",),
     ("policy_long_name",),
     ("policy_big",),
+    ("policy_period_name",),
     ("profile_big",),
     ("do_not_track",),
     ("prednat_policy",),
     ("profile_tame",),
-    ("profile_long_labels",),
+    ("profile_many_nets",),
     ("wep_lots_ips",),
     ("wep_similar_name",),
-    ("wep_long_labels",),
     ("wep_similar_name_2",),
 ])
 def test_converter(testname):
@@ -487,11 +498,105 @@ def test_converter(testname):
     rc = calicoctl("convert", data=testdata)
     rc.assert_no_error()
     converted_text = rc.output
-    converted_data = yaml.safe_load(converted_text)
+    converted_data = clean_calico_data(yaml.safe_load(converted_text))
     rc = calicoctl("create", data=converted_text)
     rc.assert_no_error()
     print "Converted data was:\n%s" % converted_text
-    rc = calicoctl("get %s %s -o yaml" % (converted_data['kind'], name(converted_data)))
-    # rc.assert_data(converted_text)
-    rc = calicoctl("get %s -o yaml" % converted_data['kind'])
-    rc.assert_list(converted_data['kind'], [converted_data])
+    rg = calicoctl("get %s %s -o yaml" % (converted_data['kind'], name(converted_data)))
+    get_data = strip_orch_label(clean_calico_data(yaml.safe_load(rg.output)))
+    assert cmp(converted_data, get_data) == 0, \
+            "Items are not the same.  Difference is:\n %s" % \
+            pformat(DeepDiff(converted_data, get_data), indent=2)
+    #rc = calicoctl("get %s -o yaml" % converted_data['kind'])
+    #rc.assert_list(converted_data['kind'], [clean_calico_data(converted_data)])
+
+# Fails validation of the label
+data['fail_hep_long_label_name'] = {
+    'apiVersion': 'v1',
+    'kind': 'hostEndpoint',
+    'metadata': {'labels': {
+        '8roper/evil-02': 'frontendFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0',
+        'calico/k8s_ns': 'default',
+        'type': 'type-endFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0'},
+        'name': 'Code85',
+        'node': 'UpgradeCode85'},
+    'spec': {'expectedIPs': ['fd00:1::321'],
+             'interfaceName': 'eth0',
+             'profiles': ['profile1', 'profile2']}
+}
+# Fails due to generating too long of a name from combining the name and node
+data['fail_hep_long_name_and_long_node'] = {
+    'apiVersion': 'v1',
+    'kind': 'hostEndpoint',
+    'metadata': {'labels': {
+        'calico/k8s_ns': 'default',
+        'type': 'type-endFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0'},
+        'name': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_AlsoAVeryLongInterfaceNameTryingToCatchOutUpgradeCode76',
+        'node': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_Also.A.Very.LongNodeNameTryingTo-CatchOut_UpgradeCode76'},
+    'spec': {'expectedIPs': ['fd00:1::321'],
+             'interfaceName': 'eth0',
+             'profiles': ['profile1', 'profile2']}
+}
+# Fails validation of the label
+data['fail_profile_long_labels'] = {
+    'apiVersion': 'v1',
+    'kind': 'profile',
+    'metadata': {'labels': {
+        '8roper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/9': 'frontendFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0'},
+        'name': '-Mary_had-A-Little___Lamb--Whose---Fleece-Was-White.As.Snow...She-Also-Had_an-Evil-ProfileName_in_order_to.break.upgradeprofile1'},
+    'spec': {'egress': [{'action': 'allow'}],
+             'ingress': [{'action': 'deny',
+                          'source': {'nets': ['10.0.20.0/24',
+                                              '192.168.218.238/32',
+                                              '47.0.0.0/8']}},
+                         {'action': 'allow',
+                          'source': {'selector': "profile == 'profile1'"}}]}
+}
+# Fails validation of the label
+data['fail_wep_long_labels'] = {
+    'apiVersion': 'v1',
+    'kind': 'workloadEndpoint',
+    'metadata': {'labels': {
+        '8roper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/Key_name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/key_Name.which/is-also_very.long...1234567890//proper/evil-02/key_name.which/is-also_very.long...1234567890//proper/evil-02/9': 'frontendFrontEnd.0123456789-_-23wdffrontendFrontEnd.0124679-_-0',
+        'calico/k8s_ns': 'default'},
+        'name': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_AlsoAVeryLongInterfaceNameTryingToCatchOutUpgradeCode75',
+        'node': '.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My.Spout.Im_Also.A.Very.LongNodeNameTryingTo-CatchOut_UpgradeCode75',
+        'orchestrator': 'k8s',
+        'workload': 'default.-_.123Im_a_Little.Teapot-Short_And-Stout.Heres-My-Handle_Heres_My_AlsoAVeryLongWorkload-NameTryingToCatchOutUpgradeCode5'},
+    'spec': {'interfaceName': 'cali0ef24ba',
+             'ipNetworks': ['192.168.255.255/32', 'fd::1:40'],
+             'mac': 'ca:fe:1d:52:bb:e9',
+             'profiles': ['profile1']}
+}
+# Fails due to incorrectly formatted workload field
+data['fail_wep_workload_bad_separator'] = {
+    'apiVersion': 'v1',
+    'kind': 'workloadEndpoint',
+    'metadata': {'labels': {'app': 'frontend', 'calico/k8s_ns': 'default'},
+                 'name': 'eth0',
+                 'node': 'rack1-host1',
+                 'orchestrator': 'k8s',
+                 'workload': 'default/frontend-5gs43'},
+    'spec': {'interfaceName': 'cali0ef24ba',
+             'ipNetworks': ['fd00:ca:fe:1d:52:bb:e9:80'],
+             'mac': 'ca:fe:1d:52:bb:e9',
+             'profiles': ['profile1']}
+}
+
+@parameterized([
+    ("fail_hep_long_label_name",),
+	("fail_hep_long_name_and_long_node",),
+    ("fail_profile_long_labels",),
+	("fail_wep_long_labels",),
+	("fail_wep_workload_bad_separator",),
+])
+def test_converter_fail(testname):
+    """
+    Attempt to convert a v1 object to v3
+    """
+    # Let's start every test afresh
+    wipe_etcd(get_ip())
+    testdata = data[testname]
+    test_converter.__name__ = testname
+    rc = calicoctl("convert", data=testdata)
+    rc.assert_error()

@@ -189,6 +189,7 @@ st: dist/calicoctl run-etcd-host
 	           -e MY_IP=$(LOCAL_IP_ENV) \
 	           --rm -t \
 	           -v $(SOURCE_DIR):/code \
+	           -v /var/run/docker.sock:/var/run/docker.sock \
 	           calico/test$(ARCHTAG) \
 	           sh -c 'nosetests $(ST_TO_RUN) -sv --nologcapture  --with-xunit --xunit-file="/code/nosetests.xml" --with-timer $(ST_OPTIONS)'
 
